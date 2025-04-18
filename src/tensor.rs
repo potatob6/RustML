@@ -296,6 +296,14 @@ impl Tensor {
         }
     }
 
+    pub fn reshape_tail(self, tail_num: usize, tail_shape: &mut Vec<usize>) -> Self {
+        let shape = self.shape.reshape_tail(tail_num, tail_shape);
+        Self {
+            shape,
+            ..self
+        }
+    }
+
     pub fn new(v: Float) -> Self {
         let shape = Shape::scalar();
 

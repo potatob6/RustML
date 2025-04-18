@@ -206,6 +206,22 @@ impl Shape {
             *self._origin.get_unchecked(*self._view.get_unchecked(axis))
         }
     }
+
+    pub fn reshape_tail(self, tail_num: usize,tail_shape: &mut Vec<usize>) -> Self {
+        let axis_num = self.num_axis();
+
+        let mut front = self._origin.iter().enumerate().filter(|x| {
+            x.0 < axis_num - tail_num
+        })
+        .map(|x| {
+            *x.1
+        })
+        .collect::<Vec<_>>();
+
+        front.append(tail_shape);
+        
+        Shape::with_vec(&front)
+    }
 }
 
 impl Indexable<usize> for Shape {
