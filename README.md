@@ -49,16 +49,16 @@ let y = Tensor::rand(1.0, &vec![10, 4]);
 使用随机初始化各层的权重和偏置：
 ```rust
 // 第1层：输入（2）→ 隐藏层1（3）
-let w1 = Tensor::rand(0.1, &vec![2, 3]);  // 权重矩阵：[2, 3]
-let b1 = Tensor::zeros(&vec![3]);         // 偏置：[3]
+let mut w1 = Tensor::rand(0.1, &vec![2, 3]);  // 权重矩阵：[2, 3]
+let mut b1 = Tensor::zeros(&vec![3]);         // 偏置：[3]
 
 // 第2层：隐藏层1（3）→ 隐藏层2（4）
-let w2 = Tensor::rand(0.1, &vec![3, 4]);  // 权重矩阵：[3, 4]
-let b2 = Tensor::zeros(&vec![4]);         // 偏置：[4]
+let mut w2 = Tensor::rand(0.1, &vec![3, 4]);  // 权重矩阵：[3, 4]
+let mut b2 = Tensor::zeros(&vec![4]);         // 偏置：[4]
 
 // 输出层：隐藏层2（4）→ 输出（4）
-let w_out = Tensor::rand(0.1, &vec![4, 4]);  // 权重矩阵：[4, 4]
-let b_out = Tensor::zeros(&vec![4]);         // 偏置：[4]
+let mut w_out = Tensor::rand(0.1, &vec![4, 4]);  // 权重矩阵：[4, 4]
+let mut b_out = Tensor::zeros(&vec![4]);         // 偏置：[4]
 ```
 
 ### 4. 前向传播
@@ -123,7 +123,7 @@ for epoch in 0..1000 {
     let loss = logits.mse(&y);
     
     // 反向传播与参数更新
-    loss.backward(loss.raw_first());
+    backward(loss.raw_first());
     w1.optimize(lr);
     b1.optimize(lr);
     w2.optimize(lr);
@@ -141,7 +141,7 @@ for epoch in 0..1000 {
     
     // 打印训练进度
     if epoch % 100 == 0 {
-        println!("Epoch {}: Loss = {}", epoch, loss.raw_data()[0]);
+        println!("Epoch {}: Loss = {}", epoch, loss.raw_data());
     }
 }
 ```
