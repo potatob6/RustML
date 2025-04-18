@@ -296,7 +296,7 @@ impl Tensor {
         }
     }
 
-    pub fn reshape_tail(self, tail_num: usize, tail_shape: &mut Vec<usize>) -> Self {
+    pub fn reshape(self, tail_num: usize, tail_shape: &mut Vec<usize>) -> Self {
         let shape = self.shape.reshape_tail(tail_num, tail_shape);
         Self {
             shape,
@@ -411,7 +411,7 @@ impl Tensor {
     }
 
     // 重塑Tensor形状（连续性保持）
-    pub fn reshape(self, new_shape: &Vec<usize>) -> Self {
+    pub fn reshape_whole(self, new_shape: &Vec<usize>) -> Self {
         let new_shape = Shape::with_vec(new_shape);
 
         Self {
@@ -546,11 +546,11 @@ impl Tensor {
     }
 
     // 沿轴折叠函数
-    pub fn axis_fold(&self, axis_flag: &Vec<bool>, mut f: impl FnMut(&mut Rc<RefCell<ValueData>>, &Rc<RefCell<ValueData>>)) -> Self {
+    pub fn axis_fold_whole(&self, axis_flag: &Vec<bool>, init: Float, mut f: impl FnMut(&mut Rc<RefCell<ValueData>>, &Rc<RefCell<ValueData>>)) -> Self {
         let now_shape = self.shape.shape();
         let new_shape = axis_cast(&now_shape, axis_flag);
 
-        let mut s = Self::zeros(&new_shape);
+        let mut s = Self::fill(init, &new_shape);
 
         self.data.iter().enumerate()
             .for_each(|x| {
@@ -564,9 +564,37 @@ impl Tensor {
         s
     }
 
+    pub fn axis_fold(&self, axis_flag_tail: &Vec<bool>, init: Float, mut f: impl FnMut(&mut Rc<RefCell<ValueData>>, &Rc<RefCell<ValueData>>)) -> Self {
+        let axis_flag = (0..self.shape.num_axis()).map(|x| {
+            !(x < self.shape.num_axis() - axis_flag_tail.len())
+        }).collect::<Vec<bool>>();
+
+        let now_shape = self.shape.shape();
+        let new_shape = axis_cast(&now_shape, &axis_flag);
+
+        let mut s = Self::fill(init, &new_shape);
+
+        self.data.iter().enumerate()
+            .for_each(|x| {
+                let v = self.shape.inverse_get(x.0);
+                let c = axis_cast(&v, &axis_flag);
+
+                let target = s.get_mut(&c);
+                f(target, x.1);
+            });
+
+        s
+    }
+
     // 沿轴向求和
+    pub fn sum_whole(&self, axis_flag: &Vec<bool>) -> Self {
+        Self::axis_fold_whole(&self, axis_flag, 0.0, |x, y| {
+            *x = value_add(x.clone(), y.clone());
+        })
+    }
+
     pub fn sum(&self, axis_flag: &Vec<bool>) -> Self {
-        Self::axis_fold(&self, axis_flag, |x, y| {
+        Self::axis_fold(&self, axis_flag, 0.0, |x, y| {
             *x = value_add(x.clone(), y.clone());
         })
     }
@@ -605,20 +633,9 @@ impl Tensor {
 
     // softmax函数，添加微小误差
     pub fn softmax(&self) -> Self {
-        let shape = self.shape.clone();
-
-        let axis_flag = (0..shape.num_axis())
-            .map(|x| {
-                if x == shape.num_axis() - 1 {
-                    true
-                } else {
-                    false
-                }
-            }).collect();
-
         let self_exp = self.exp();
 
-        let t1 = self_exp.sum(&axis_flag);
+        let t1 = self_exp.sum(&vec![true]);
         let t1 = t1.recip_epsilon(1e-8);
 
         self_exp.dot_mul(&t1)
@@ -627,20 +644,9 @@ impl Tensor {
 
     // softmax函数，自定义微小误差
     pub fn softmax_epsilon(&self, epsilon: Float) -> Self {
-        let shape = self.shape.clone();
-
-        let axis_flag = (0..shape.num_axis())
-            .map(|x| {
-                if x == shape.num_axis() - 1 {
-                    true
-                } else {
-                    false
-                }
-            }).collect();
-
         let self_exp = self.exp();
 
-        let t1 = self_exp.sum(&axis_flag);
+        let t1 = self_exp.sum(&vec![true]);
         let t1 = t1.recip_epsilon(epsilon);
 
         self_exp.dot_mul(&t1)
@@ -689,13 +695,7 @@ impl Tensor {
         let n = Self::new(last_axis_num as Float).to_const();
         let n = n.recip_epsilon(0.0);
         let t1 = t1.dot_mul(&n);
-        let t1 = t1.sum(&(0..t1.shape.num_axis()).map(|x| {
-            if x == t1.shape.num_axis() - 1 {
-                true
-            } else {
-                false
-            }
-        }).collect());
+        let t1 = t1.sum(&vec![true]);
         t1
     }
 
@@ -703,13 +703,7 @@ impl Tensor {
         let t1 = self.ln();
         let t1 = label.dot_mul(&t1);
 
-        let t1 = t1.sum(&(0..t1.shape.num_axis()).map(|x| {
-            if x == t1.shape.num_axis() - 1 {
-                true
-            } else {
-                false
-            }
-        }).collect());
+        let t1 = t1.sum(&vec![true]);
         t1.rev()
     }
 
@@ -740,58 +734,3 @@ fn axis_cast(axis: &Vec<usize>, axis_flag: &Vec<bool>) -> Vec<usize> {
         })
         .collect::<Vec<_>>()
 }
-
-// 均方误差函数
-// pub fn tensor_mse(label: &Tensor, predict: &Tensor) -> Tensor {
-//     assert_eq!(label.row_c, predict.row_c);
-//     assert_eq!(label.col_c, predict.col_c);
-
-//     let size = label.row_c * label.col_c;
-
-//     let v = label.data.iter().cloned().zip(
-//         predict.data.iter().cloned()
-//     )
-//     .map(|x| {
-//         let t1 = value_add(x.0, value_rev(x.1));
-//         value_mul(t1.clone(), t1.clone())
-//     })
-//     .fold(Rc::new(RefCell::new(ValueData::new(0.0))), |acc, x| {
-//         value_add(acc, x).clone()
-//     });
-
-//     let size = Rc::new(RefCell::new(ValueData::new(size as Float)));
-//     let mse = value_mul(v, value_recip(size));
-    
-//     Tensor {
-//         row_c: 1,
-//         col_c: 1,
-//         data: vec![mse],
-//         extendable: false,
-//     }
-// }
-
-// // 交叉熵函数
-// pub fn tensor_cross_entropy(label: &Tensor, predict: &Tensor) -> Tensor {
-//     assert_eq!(label.col_c, predict.col_c);
-//     assert_eq!(label.row_c, predict.row_c);
-
-//     let sum = Rc::new(RefCell::new(ValueData::new(0.0)));
-//     let zip1 = label
-//         .data.iter().cloned()
-//         .zip(
-//             predict.data.iter().cloned()
-//         ).collect::<Vec<(Value, Value)>>();
-
-//     let s = zip1.iter().fold(sum, |acc, x| {
-//         value_add(acc.clone(), value_mul(x.0.clone(), value_ln(x.1.clone()))).clone()
-//     });
-
-//     let s = value_rev(s.clone());
-
-//     Tensor {
-//         row_c: 1,
-//         col_c: 1,
-//         data: vec![s.clone()],
-//         extendable: false,
-//     }
-// }
