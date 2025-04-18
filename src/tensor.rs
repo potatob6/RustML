@@ -281,6 +281,21 @@ impl Tensor {
         }
     }
 
+    pub fn shape_contiguous(self) -> Self {
+        let shape = Shape::with_vec(&self.shape());
+        let data = (0..shape.size())
+            .map(|x| {
+                let position = shape.inverse_get(x);
+                self.get(&position).clone()
+            })
+            .collect();
+
+        Self {
+            shape,
+            data,
+        }
+    }
+
     pub fn new(v: Float) -> Self {
         let shape = Shape::scalar();
 
