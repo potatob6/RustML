@@ -81,6 +81,7 @@ let logits = a2.mul(&w_out).add(&b_out);
 计算预测值与真实标签的均方误差（MSE）：
 ```rust
 let loss = logits.mse(&y);  // 计算MSE损失
+```
 
 ### 6. 反向传播与梯度下降
 反向传播：计算损失对所有参数的梯度
